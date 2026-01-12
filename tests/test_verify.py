@@ -58,7 +58,7 @@ def test_run_all_checks(monkeypatch, tmp_path: Path) -> None:
     with Session(engine) as session:
         ok, report = run_all_checks(session)
     assert ok is True
-    assert report["problems"] == []
+    assert report["errors"] == []
 
     with Session(engine) as session:
         spell = Spell(
@@ -77,4 +77,4 @@ def test_run_all_checks(monkeypatch, tmp_path: Path) -> None:
         ok, report = run_all_checks(session)
 
     assert ok is False
-    assert any("missing raw_entity_id" in problem for problem in report["problems"])
+    assert any("missing raw_entity_id" in error for error in report["errors"])

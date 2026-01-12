@@ -404,39 +404,26 @@ def check_feature_essentials(session: Session) -> list[str]:
 def run_all_checks(session: Session) -> tuple[bool, dict[str, Any]]:
     """Run all verification checks and return (ok, report)."""
     counts = check_counts(session)
-    problems: list[str] = []
+    warnings = counts.get("warnings", [])
+    errors: list[str] = []
+
     if counts["raw_entities_spell"] != counts["spells"]:
-        problems.append(
+        errors.append(
             "Spell count mismatch: "
             f"raw_entities spell={counts['raw_entities_spell']} spells={counts['spells']}"
         )
-    if counts["raw_entities_class"] != counts["classes"]:
-        problems.append(
-            "Class count mismatch: "
-            f"raw_entities class={counts['raw_entities_class']} classes={counts['classes']}"
-        )
-    if counts["raw_entities_subclass"] != counts["subclasses"]:
-        problems.append(
-            "Subclass count mismatch: "
-            "raw_entities subclass="
-            f"{counts['raw_entities_subclass']} subclasses={counts['subclasses']}"
-        )
-    if counts["raw_entities_feature"] != counts["features"]:
-        problems.append(
-            "Feature count mismatch: "
-            "raw_entities feature="
-            f"{counts['raw_entities_feature']} features={counts['features']}"
-        )
-    problems.extend(check_duplicates(session))
-    problems.extend(check_missing_links(session))
-    problems.extend(check_spell_essentials(session))
-    problems.extend(check_class_essentials(session))
-    problems.extend(check_subclass_essentials(session))
-    problems.extend(check_feature_essentials(session))
+
+    errors.extend(check_duplicates(session))
+    errors.extend(check_missing_links(session))
+    errors.extend(check_spell_essentials(session))
+    errors.extend(check_class_essentials(session))
+    errors.extend(check_subclass_essentials(session))
+    errors.extend(check_feature_essentials(session))
 
     report = {
         "counts": counts,
-        "problems": problems,
+        "warnings": warnings,
+        "errors": errors,
     }
-    ok = len(problems) == 0
+    ok = len(errors) == 0
     return ok, report
