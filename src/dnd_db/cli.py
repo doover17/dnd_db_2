@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 from sqlalchemy import inspect
 from sqlmodel import Session, select
@@ -11,7 +12,10 @@ from dnd_db.config import get_api_base_url, get_db_path
 from dnd_db.db.engine import create_db_and_tables, get_engine
 from dnd_db.db.upsert import upsert_raw_entity
 from dnd_db.ingest.api_client import SrdApiClient
+from dnd_db.ingest.import_spells import import_spells
+from dnd_db.models.import_run import ImportRun
 from dnd_db.models.source import Source
+from dnd_db.verify.checks import run_all_checks
 
 
 def _init_db() -> None:
@@ -119,6 +123,75 @@ def _api_fetch_all(
             print(f"Fetched {idx}/{total} {resource}")
 
 
+def _import_spells(
+    base_url: str | None, refresh: bool, limit: int | None
+) -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    processed = import_spells(
+        engine=engine, base_url=base_url, limit=limit, refresh=refresh
+    )
+
+    with Session(engine) as session:
+        run = session.exec(
+            select(ImportRun).order_by(ImportRun.id.desc()).limit(1)
+        ).one_or_none()
+
+    print(f"Database path: {get_db_path()}")
+    print(f"Processed spells: {processed}")
+    if run is None:
+        return
+    print(f"Import status: {run.status}")
+    if run.notes:
+        try:
+            notes = json.loads(run.notes)
+        except json.JSONDecodeError:
+            notes = None
+        if isinstance(notes, dict):
+            raw_created = notes.get("raw_created", 0)
+            raw_updated = notes.get("raw_updated", 0)
+            spell_created = notes.get("spell_created", 0)
+            spell_updated = notes.get("spell_updated", 0)
+            print(
+                "Raw entities created/updated: "
+                f"{raw_created}/{raw_updated}"
+            )
+            print(
+                "Spells created/updated: "
+                f"{spell_created}/{spell_updated}"
+            )
+
+
+
+def _verify() -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    with Session(engine) as session:
+        ok, report = run_all_checks(session)
+
+    counts = report["counts"]
+    print("Counts:")
+    print(f"- sources: {counts['sources']}")
+    print(f"- import_runs: {counts['import_runs']}")
+    print(f"- raw_entities: {counts['raw_entities']}")
+    print(f"- raw_entities_spell: {counts['raw_entities_spell']}")
+    print(f"- spells: {counts['spells']}")
+
+    warnings = counts.get("warnings", [])
+    if warnings:
+        print("Warnings:")
+        for warning in warnings:
+            print(f"- {warning}")
+
+    problems = report["problems"]
+    if problems:
+        print("Problems:")
+        for problem in problems:
+            print(f"- {problem}")
+        raise SystemExit(1)
+    print("No problems detected.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="dnd_db CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -162,6 +235,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override API base URL",
     )
     api_fetch_all.add_argument("--refresh", action="store_true", help="Bypass cache")
+
+    import_spells_parser = subparsers.add_parser(
+        "import-spells", help="Import spells from the SRD API"
+    )
+    import_spells_parser.add_argument(
+        "--limit", type=int, default=None, help="Limit number of spells"
+    )
+    import_spells_parser.add_argument(
+        "--base-url",
+        default=get_api_base_url(),
+        help="Override API base URL",
+    )
+    import_spells_parser.add_argument("--refresh", action="store_true")
+
+    subparsers.add_parser("verify", help="Run verification checks")
+
     return parser
 
 
@@ -183,6 +272,10 @@ def main() -> None:
         _api_get(args.resource, args.index, args.base_url, args.refresh)
     elif args.command == "api-fetch-all":
         _api_fetch_all(args.resource, args.base_url, args.refresh, args.limit)
+    elif args.command == "import-spells":
+        _import_spells(args.base_url, args.refresh, args.limit)
+    elif args.command == "verify":
+        _verify()
     else:
         parser.error(f"Unknown command: {args.command}")
 
