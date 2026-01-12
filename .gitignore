@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.env
+.venv
+venv/
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Data
+data/raw/*
+!data/raw/.gitkeep
+data/sqlite/*
+!data/sqlite/.gitkeep
+
+# macOS
+.DS_Store
