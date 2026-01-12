@@ -7,9 +7,10 @@ import argparse
 from sqlalchemy import inspect
 from sqlmodel import Session, select
 
-from dnd_db.config import get_db_path
+from dnd_db.config import get_api_base_url, get_db_path
 from dnd_db.db.engine import create_db_and_tables, get_engine
 from dnd_db.db.upsert import upsert_raw_entity
+from dnd_db.ingest.api_client import SrdApiClient
 from dnd_db.models.source import Source
 
 
@@ -79,6 +80,45 @@ def _upsert_raw_sample() -> None:
         print(f"No change for raw entity {entity.id}")
 
 
+def _api_index(resource: str, base_url: str | None, refresh: bool) -> None:
+    client = SrdApiClient(base_url=base_url, refresh=refresh)
+    results = client.list_resources(resource)
+    print(f"Resource '{resource}' count: {len(results)}")
+    for entry in results[:5]:
+        name = entry.get("name")
+        index = entry.get("index")
+        url = entry.get("url")
+        print(f"- {name} ({index}) {url}")
+
+
+def _api_get(resource: str, index: str, base_url: str | None, refresh: bool) -> None:
+    client = SrdApiClient(base_url=base_url, refresh=refresh)
+    payload = client.get_resource(resource, index)
+    name = payload.get("name")
+    url = payload.get("url")
+    keys = ", ".join(sorted(payload.keys()))
+    print(f"{name} ({payload.get('index')}) {url}")
+    print(f"Keys: {keys}")
+
+
+def _api_fetch_all(
+    resource: str, base_url: str | None, refresh: bool, limit: int | None
+) -> None:
+    client = SrdApiClient(base_url=base_url, refresh=refresh)
+    entries = client.list_resources(resource)
+    if limit is not None:
+        entries = entries[:limit]
+    total = len(entries)
+    for idx, entry in enumerate(entries, start=1):
+        index = entry.get("index")
+        if not index:
+            print(f"Skipping entry without index: {entry}")
+            continue
+        client.get_resource(resource, index)
+        if idx % 25 == 0 or idx == total:
+            print(f"Fetched {idx}/{total} {resource}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="dnd_db CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -89,6 +129,39 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "upsert-raw-sample", help="Upsert a sample raw entity payload"
     )
+
+    api_index = subparsers.add_parser("api-index", help="List API resources")
+    api_index.add_argument("resource")
+    api_index.add_argument(
+        "--base-url",
+        default=get_api_base_url(),
+        help="Override API base URL",
+    )
+    api_index.add_argument("--refresh", action="store_true", help="Bypass cache")
+
+    api_get = subparsers.add_parser("api-get", help="Get a resource by index")
+    api_get.add_argument("resource")
+    api_get.add_argument("index")
+    api_get.add_argument(
+        "--base-url",
+        default=get_api_base_url(),
+        help="Override API base URL",
+    )
+    api_get.add_argument("--refresh", action="store_true", help="Bypass cache")
+
+    api_fetch_all = subparsers.add_parser(
+        "api-fetch-all", help="Fetch all resources for a type"
+    )
+    api_fetch_all.add_argument("resource")
+    api_fetch_all.add_argument(
+        "--limit", type=int, default=None, help="Limit number of records"
+    )
+    api_fetch_all.add_argument(
+        "--base-url",
+        default=get_api_base_url(),
+        help="Override API base URL",
+    )
+    api_fetch_all.add_argument("--refresh", action="store_true", help="Bypass cache")
     return parser
 
 
@@ -104,6 +177,12 @@ def main() -> None:
         _seed_source()
     elif args.command == "upsert-raw-sample":
         _upsert_raw_sample()
+    elif args.command == "api-index":
+        _api_index(args.resource, args.base_url, args.refresh)
+    elif args.command == "api-get":
+        _api_get(args.resource, args.index, args.base_url, args.refresh)
+    elif args.command == "api-fetch-all":
+        _api_fetch_all(args.resource, args.base_url, args.refresh, args.limit)
     else:
         parser.error(f"Unknown command: {args.command}")
 
