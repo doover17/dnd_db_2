@@ -1,0 +1,18 @@
+[project]
+name = "dnd-db"
+version = "0.1.0"
+description = "Local D&D 5e SRD database built from 5e-bits APIs"
+requires-python = ">=3.10"
+
+dependencies = [
+  "requests",
+  "sqlalchemy>=2.0",
+  "sqlmodel",
+  "pydantic",
+]
+
+[tool.black]
+line-length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
