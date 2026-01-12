@@ -12,7 +12,10 @@ from dnd_db.config import get_api_base_url, get_db_path
 from dnd_db.db.engine import create_db_and_tables, get_engine
 from dnd_db.db.upsert import upsert_raw_entity
 from dnd_db.ingest.api_client import SrdApiClient
+from dnd_db.ingest.import_classes import import_classes
+from dnd_db.ingest.import_features import import_features
 from dnd_db.ingest.import_spells import import_spells
+from dnd_db.ingest.import_subclasses import import_subclasses
 from dnd_db.models.import_run import ImportRun
 from dnd_db.models.source import Source
 from dnd_db.verify.checks import run_all_checks
@@ -162,6 +165,123 @@ def _import_spells(
             )
 
 
+def _import_classes(
+    base_url: str | None, refresh: bool, limit: int | None
+) -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    processed = import_classes(
+        engine=engine, base_url=base_url, limit=limit, refresh=refresh
+    )
+
+    with Session(engine) as session:
+        run = session.exec(
+            select(ImportRun).order_by(ImportRun.id.desc()).limit(1)
+        ).one_or_none()
+
+    print(f"Database path: {get_db_path()}")
+    print(f"Processed classes: {processed}")
+    if run is None:
+        return
+    print(f"Import status: {run.status}")
+    if run.notes:
+        try:
+            notes = json.loads(run.notes)
+        except json.JSONDecodeError:
+            notes = None
+        if isinstance(notes, dict):
+            raw_created = notes.get("raw_created", 0)
+            raw_updated = notes.get("raw_updated", 0)
+            class_created = notes.get("class_created", 0)
+            class_updated = notes.get("class_updated", 0)
+            print(
+                "Raw entities created/updated: "
+                f"{raw_created}/{raw_updated}"
+            )
+            print(
+                "Classes created/updated: "
+                f"{class_created}/{class_updated}"
+            )
+
+
+def _import_subclasses(
+    base_url: str | None, refresh: bool, limit: int | None
+) -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    processed = import_subclasses(
+        engine=engine, base_url=base_url, limit=limit, refresh=refresh
+    )
+
+    with Session(engine) as session:
+        run = session.exec(
+            select(ImportRun).order_by(ImportRun.id.desc()).limit(1)
+        ).one_or_none()
+
+    print(f"Database path: {get_db_path()}")
+    print(f"Processed subclasses: {processed}")
+    if run is None:
+        return
+    print(f"Import status: {run.status}")
+    if run.notes:
+        try:
+            notes = json.loads(run.notes)
+        except json.JSONDecodeError:
+            notes = None
+        if isinstance(notes, dict):
+            raw_created = notes.get("raw_created", 0)
+            raw_updated = notes.get("raw_updated", 0)
+            subclass_created = notes.get("subclass_created", 0)
+            subclass_updated = notes.get("subclass_updated", 0)
+            print(
+                "Raw entities created/updated: "
+                f"{raw_created}/{raw_updated}"
+            )
+            print(
+                "Subclasses created/updated: "
+                f"{subclass_created}/{subclass_updated}"
+            )
+
+
+def _import_features(
+    base_url: str | None, refresh: bool, limit: int | None
+) -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    processed = import_features(
+        engine=engine, base_url=base_url, limit=limit, refresh=refresh
+    )
+
+    with Session(engine) as session:
+        run = session.exec(
+            select(ImportRun).order_by(ImportRun.id.desc()).limit(1)
+        ).one_or_none()
+
+    print(f"Database path: {get_db_path()}")
+    print(f"Processed features: {processed}")
+    if run is None:
+        return
+    print(f"Import status: {run.status}")
+    if run.notes:
+        try:
+            notes = json.loads(run.notes)
+        except json.JSONDecodeError:
+            notes = None
+        if isinstance(notes, dict):
+            raw_created = notes.get("raw_created", 0)
+            raw_updated = notes.get("raw_updated", 0)
+            feature_created = notes.get("feature_created", 0)
+            feature_updated = notes.get("feature_updated", 0)
+            print(
+                "Raw entities created/updated: "
+                f"{raw_created}/{raw_updated}"
+            )
+            print(
+                "Features created/updated: "
+                f"{feature_created}/{feature_updated}"
+            )
+
+
 
 def _verify() -> None:
     engine = get_engine()
@@ -175,7 +295,13 @@ def _verify() -> None:
     print(f"- import_runs: {counts['import_runs']}")
     print(f"- raw_entities: {counts['raw_entities']}")
     print(f"- raw_entities_spell: {counts['raw_entities_spell']}")
+    print(f"- raw_entities_class: {counts['raw_entities_class']}")
+    print(f"- raw_entities_subclass: {counts['raw_entities_subclass']}")
+    print(f"- raw_entities_feature: {counts['raw_entities_feature']}")
     print(f"- spells: {counts['spells']}")
+    print(f"- classes: {counts['classes']}")
+    print(f"- subclasses: {counts['subclasses']}")
+    print(f"- features: {counts['features']}")
 
     warnings = counts.get("warnings", [])
     if warnings:
@@ -249,6 +375,45 @@ def build_parser() -> argparse.ArgumentParser:
     )
     import_spells_parser.add_argument("--refresh", action="store_true")
 
+    import_classes_parser = subparsers.add_parser(
+        "import-classes", help="Import classes from the SRD API"
+    )
+    import_classes_parser.add_argument(
+        "--limit", type=int, default=None, help="Limit number of classes"
+    )
+    import_classes_parser.add_argument(
+        "--base-url",
+        default=get_api_base_url(),
+        help="Override API base URL",
+    )
+    import_classes_parser.add_argument("--refresh", action="store_true")
+
+    import_subclasses_parser = subparsers.add_parser(
+        "import-subclasses", help="Import subclasses from the SRD API"
+    )
+    import_subclasses_parser.add_argument(
+        "--limit", type=int, default=None, help="Limit number of subclasses"
+    )
+    import_subclasses_parser.add_argument(
+        "--base-url",
+        default=get_api_base_url(),
+        help="Override API base URL",
+    )
+    import_subclasses_parser.add_argument("--refresh", action="store_true")
+
+    import_features_parser = subparsers.add_parser(
+        "import-features", help="Import features from the SRD API"
+    )
+    import_features_parser.add_argument(
+        "--limit", type=int, default=None, help="Limit number of features"
+    )
+    import_features_parser.add_argument(
+        "--base-url",
+        default=get_api_base_url(),
+        help="Override API base URL",
+    )
+    import_features_parser.add_argument("--refresh", action="store_true")
+
     subparsers.add_parser("verify", help="Run verification checks")
 
     return parser
@@ -274,6 +439,12 @@ def main() -> None:
         _api_fetch_all(args.resource, args.base_url, args.refresh, args.limit)
     elif args.command == "import-spells":
         _import_spells(args.base_url, args.refresh, args.limit)
+    elif args.command == "import-classes":
+        _import_classes(args.base_url, args.refresh, args.limit)
+    elif args.command == "import-subclasses":
+        _import_subclasses(args.base_url, args.refresh, args.limit)
+    elif args.command == "import-features":
+        _import_features(args.base_url, args.refresh, args.limit)
     elif args.command == "verify":
         _verify()
     else:

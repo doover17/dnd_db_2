@@ -7,10 +7,13 @@ from typing import Any
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
+from dnd_db.models.character_class import CharacterClass
+from dnd_db.models.feature import Feature
 from dnd_db.models.import_run import ImportRun
 from dnd_db.models.raw_entity import RawEntity
 from dnd_db.models.source import Source
 from dnd_db.models.spell import Spell
+from dnd_db.models.subclass import Subclass
 
 
 def check_counts(session: Session) -> dict[str, Any]:
@@ -21,12 +24,41 @@ def check_counts(session: Session) -> dict[str, Any]:
     raw_spells = session.exec(
         select(func.count()).select_from(RawEntity).where(RawEntity.entity_type == "spell")
     ).one()
+    raw_classes = session.exec(
+        select(func.count()).select_from(RawEntity).where(RawEntity.entity_type == "class")
+    ).one()
+    raw_subclasses = session.exec(
+        select(func.count())
+        .select_from(RawEntity)
+        .where(RawEntity.entity_type == "subclass")
+    ).one()
+    raw_features = session.exec(
+        select(func.count()).select_from(RawEntity).where(RawEntity.entity_type == "feature")
+    ).one()
     spell_count = session.exec(select(func.count()).select_from(Spell)).one()
+    class_count = session.exec(select(func.count()).select_from(CharacterClass)).one()
+    subclass_count = session.exec(select(func.count()).select_from(Subclass)).one()
+    feature_count = session.exec(select(func.count()).select_from(Feature)).one()
 
     warnings: list[str] = []
     if raw_spells != spell_count:
         warnings.append(
             f"Spell count mismatch: raw_entities spell={raw_spells} spells={spell_count}"
+        )
+    if raw_classes != class_count:
+        warnings.append(
+            "Class count mismatch: "
+            f"raw_entities class={raw_classes} classes={class_count}"
+        )
+    if raw_subclasses != subclass_count:
+        warnings.append(
+            "Subclass count mismatch: "
+            f"raw_entities subclass={raw_subclasses} subclasses={subclass_count}"
+        )
+    if raw_features != feature_count:
+        warnings.append(
+            "Feature count mismatch: "
+            f"raw_entities feature={raw_features} features={feature_count}"
         )
 
     return {
@@ -34,7 +66,13 @@ def check_counts(session: Session) -> dict[str, Any]:
         "import_runs": import_run_count,
         "raw_entities": raw_total,
         "raw_entities_spell": raw_spells,
+        "raw_entities_class": raw_classes,
+        "raw_entities_subclass": raw_subclasses,
+        "raw_entities_feature": raw_features,
         "spells": spell_count,
+        "classes": class_count,
+        "subclasses": subclass_count,
+        "features": feature_count,
         "warnings": warnings,
     }
 
@@ -73,11 +111,56 @@ def check_duplicates(session: Session) -> list[str]:
             f"Duplicate spell: source_id={source_id} source_key={source_key} count={count}"
         )
 
+    class_duplicates = session.exec(
+        select(
+            CharacterClass.source_id,
+            CharacterClass.source_key,
+            func.count().label("count"),
+        )
+        .group_by(CharacterClass.source_id, CharacterClass.source_key)
+        .having(func.count() > 1)
+    ).all()
+    for source_id, source_key, count in class_duplicates:
+        problems.append(
+            "Duplicate class: "
+            f"source_id={source_id} source_key={source_key} count={count}"
+        )
+
+    subclass_duplicates = session.exec(
+        select(
+            Subclass.source_id,
+            Subclass.source_key,
+            func.count().label("count"),
+        )
+        .group_by(Subclass.source_id, Subclass.source_key)
+        .having(func.count() > 1)
+    ).all()
+    for source_id, source_key, count in subclass_duplicates:
+        problems.append(
+            "Duplicate subclass: "
+            f"source_id={source_id} source_key={source_key} count={count}"
+        )
+
+    feature_duplicates = session.exec(
+        select(
+            Feature.source_id,
+            Feature.source_key,
+            func.count().label("count"),
+        )
+        .group_by(Feature.source_id, Feature.source_key)
+        .having(func.count() > 1)
+    ).all()
+    for source_id, source_key, count in feature_duplicates:
+        problems.append(
+            "Duplicate feature: "
+            f"source_id={source_id} source_key={source_key} count={count}"
+        )
+
     return problems
 
 
 def check_missing_links(session: Session) -> list[str]:
-    """Detect spells missing raw entity links."""
+    """Detect records missing raw entity links."""
     problems: list[str] = []
 
     missing_raw_link = session.exec(
@@ -114,6 +197,114 @@ def check_missing_links(session: Session) -> list[str]:
             f"id={raw_entity.id} source_key={raw_entity.source_key}"
         )
 
+    missing_class_link = session.exec(
+        select(CharacterClass).where(CharacterClass.raw_entity_id.is_(None))
+    ).all()
+    for character_class in missing_class_link:
+        problems.append(
+            "Class missing raw_entity_id: "
+            f"id={character_class.id} source_key={character_class.source_key}"
+        )
+
+    orphaned_class = session.exec(
+        select(CharacterClass).where(
+            CharacterClass.raw_entity_id.is_not(None),
+            ~CharacterClass.raw_entity_id.in_(raw_ids),
+        )
+    ).all()
+    for character_class in orphaned_class:
+        problems.append(
+            "Class raw_entity_id missing raw entity: "
+            f"id={character_class.id} raw_entity_id={character_class.raw_entity_id}"
+        )
+
+    raw_class_ids = select(CharacterClass.raw_entity_id).where(
+        CharacterClass.raw_entity_id.is_not(None)
+    )
+    orphaned_raw_classes = session.exec(
+        select(RawEntity).where(
+            RawEntity.entity_type == "class",
+            ~RawEntity.id.in_(raw_class_ids),
+        )
+    ).all()
+    for raw_entity in orphaned_raw_classes:
+        problems.append(
+            "Raw entity class missing class link: "
+            f"id={raw_entity.id} source_key={raw_entity.source_key}"
+        )
+
+    missing_subclass_link = session.exec(
+        select(Subclass).where(Subclass.raw_entity_id.is_(None))
+    ).all()
+    for subclass in missing_subclass_link:
+        problems.append(
+            "Subclass missing raw_entity_id: "
+            f"id={subclass.id} source_key={subclass.source_key}"
+        )
+
+    orphaned_subclass = session.exec(
+        select(Subclass).where(
+            Subclass.raw_entity_id.is_not(None),
+            ~Subclass.raw_entity_id.in_(raw_ids),
+        )
+    ).all()
+    for subclass in orphaned_subclass:
+        problems.append(
+            "Subclass raw_entity_id missing raw entity: "
+            f"id={subclass.id} raw_entity_id={subclass.raw_entity_id}"
+        )
+
+    raw_subclass_ids = select(Subclass.raw_entity_id).where(
+        Subclass.raw_entity_id.is_not(None)
+    )
+    orphaned_raw_subclasses = session.exec(
+        select(RawEntity).where(
+            RawEntity.entity_type == "subclass",
+            ~RawEntity.id.in_(raw_subclass_ids),
+        )
+    ).all()
+    for raw_entity in orphaned_raw_subclasses:
+        problems.append(
+            "Raw entity subclass missing subclass link: "
+            f"id={raw_entity.id} source_key={raw_entity.source_key}"
+        )
+
+    missing_feature_link = session.exec(
+        select(Feature).where(Feature.raw_entity_id.is_(None))
+    ).all()
+    for feature in missing_feature_link:
+        problems.append(
+            "Feature missing raw_entity_id: "
+            f"id={feature.id} source_key={feature.source_key}"
+        )
+
+    orphaned_feature = session.exec(
+        select(Feature).where(
+            Feature.raw_entity_id.is_not(None),
+            ~Feature.raw_entity_id.in_(raw_ids),
+        )
+    ).all()
+    for feature in orphaned_feature:
+        problems.append(
+            "Feature raw_entity_id missing raw entity: "
+            f"id={feature.id} raw_entity_id={feature.raw_entity_id}"
+        )
+
+    raw_feature_ids = select(Feature.raw_entity_id).where(
+        Feature.raw_entity_id.is_not(None)
+    )
+    orphaned_raw_features = session.exec(
+        select(RawEntity).where(
+            RawEntity.entity_type == "feature",
+            ~RawEntity.id.in_(raw_feature_ids),
+        )
+    ).all()
+    for raw_entity in orphaned_raw_features:
+        problems.append(
+            "Raw entity feature missing feature link: "
+            f"id={raw_entity.id} source_key={raw_entity.source_key}"
+        )
+
     return problems
 
 
@@ -141,6 +332,75 @@ def check_spell_essentials(session: Session) -> list[str]:
     return problems
 
 
+def check_class_essentials(session: Session) -> list[str]:
+    """Detect classes missing required name/index information."""
+    problems: list[str] = []
+
+    missing_essentials = session.exec(
+        select(CharacterClass).where(
+            or_(
+                CharacterClass.name.is_(None),
+                CharacterClass.name == "",
+                CharacterClass.source_key.is_(None),
+                CharacterClass.source_key == "",
+            )
+        )
+    ).all()
+    for character_class in missing_essentials:
+        problems.append(
+            "Class missing essentials: "
+            f"id={character_class.id} name={character_class.name} source_key={character_class.source_key}"
+        )
+
+    return problems
+
+
+def check_subclass_essentials(session: Session) -> list[str]:
+    """Detect subclasses missing required name/index information."""
+    problems: list[str] = []
+
+    missing_essentials = session.exec(
+        select(Subclass).where(
+            or_(
+                Subclass.name.is_(None),
+                Subclass.name == "",
+                Subclass.source_key.is_(None),
+                Subclass.source_key == "",
+            )
+        )
+    ).all()
+    for subclass in missing_essentials:
+        problems.append(
+            "Subclass missing essentials: "
+            f"id={subclass.id} name={subclass.name} source_key={subclass.source_key}"
+        )
+
+    return problems
+
+
+def check_feature_essentials(session: Session) -> list[str]:
+    """Detect features missing required name/index information."""
+    problems: list[str] = []
+
+    missing_essentials = session.exec(
+        select(Feature).where(
+            or_(
+                Feature.name.is_(None),
+                Feature.name == "",
+                Feature.source_key.is_(None),
+                Feature.source_key == "",
+            )
+        )
+    ).all()
+    for feature in missing_essentials:
+        problems.append(
+            "Feature missing essentials: "
+            f"id={feature.id} name={feature.name} source_key={feature.source_key}"
+        )
+
+    return problems
+
+
 def run_all_checks(session: Session) -> tuple[bool, dict[str, Any]]:
     """Run all verification checks and return (ok, report)."""
     counts = check_counts(session)
@@ -150,9 +410,29 @@ def run_all_checks(session: Session) -> tuple[bool, dict[str, Any]]:
             "Spell count mismatch: "
             f"raw_entities spell={counts['raw_entities_spell']} spells={counts['spells']}"
         )
+    if counts["raw_entities_class"] != counts["classes"]:
+        problems.append(
+            "Class count mismatch: "
+            f"raw_entities class={counts['raw_entities_class']} classes={counts['classes']}"
+        )
+    if counts["raw_entities_subclass"] != counts["subclasses"]:
+        problems.append(
+            "Subclass count mismatch: "
+            "raw_entities subclass="
+            f"{counts['raw_entities_subclass']} subclasses={counts['subclasses']}"
+        )
+    if counts["raw_entities_feature"] != counts["features"]:
+        problems.append(
+            "Feature count mismatch: "
+            "raw_entities feature="
+            f"{counts['raw_entities_feature']} features={counts['features']}"
+        )
     problems.extend(check_duplicates(session))
     problems.extend(check_missing_links(session))
     problems.extend(check_spell_essentials(session))
+    problems.extend(check_class_essentials(session))
+    problems.extend(check_subclass_essentials(session))
+    problems.extend(check_feature_essentials(session))
 
     report = {
         "counts": counts,
