@@ -303,19 +303,19 @@ def _verify() -> None:
     print(f"- subclasses: {counts['subclasses']}")
     print(f"- features: {counts['features']}")
 
-    warnings = counts.get("warnings", [])
+    warnings = report.get("warnings", [])
     if warnings:
         print("Warnings:")
         for warning in warnings:
             print(f"- {warning}")
 
-    problems = report["problems"]
-    if problems:
-        print("Problems:")
-        for problem in problems:
-            print(f"- {problem}")
+    errors = report.get("errors", [])
+    if errors:
+        print("Errors:")
+        for error in errors:
+            print(f"- {error}")
         raise SystemExit(1)
-    print("No problems detected.")
+    print("No errors detected.")
 
 
 def build_parser() -> argparse.ArgumentParser:

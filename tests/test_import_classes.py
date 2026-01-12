@@ -74,7 +74,7 @@ def test_import_classes_idempotent(monkeypatch, tmp_path: Path) -> None:
     assert len(raw_classes) == 2
     assert runs[-1].status == "success"
     assert ok is True
-    assert report["problems"] == []
+    assert report["errors"] == []
 
     processed = import_classes(engine=engine, base_url="https://example.com")
     assert processed == 2

@@ -17,4 +17,5 @@ typecheck:
 import-spells:
 	$(PYTHON) -m dnd_db.cli import-spells
 
-verify: fmt lint test
+verify:
+	$(PYTHON) -m dnd_db.cli verify
