@@ -157,7 +157,9 @@ def _seed_query_data(session: Session) -> dict[str, int]:
         choice_type="fighting_style",
         choose_n=1,
         level=1,
+        label="Fighting Style",
         notes="Choose a fighting style",
+        source_key="class:fighter:fighting_style:1:fighting-style",
     )
     session.add(group)
     session.commit()
@@ -168,15 +170,15 @@ def _seed_query_data(session: Session) -> dict[str, int]:
             choice_group_id=group.id,
             option_type="feature",
             option_source_key="defense",
-            option_ref_id=None,
             label="Defense",
+            feature_id=None,
         ),
         ChoiceOption(
             choice_group_id=group.id,
             option_type="feature",
             option_source_key="dueling",
-            option_ref_id=None,
             label="Dueling",
+            feature_id=None,
         ),
     ]
     session.add_all(options)
@@ -250,20 +252,22 @@ def test_queries(tmp_path: Path) -> None:
                 "choice_type": "fighting_style",
                 "choose_n": 1,
                 "level": 1,
+                "label": "Fighting Style",
                 "notes": "Choose a fighting style",
+                "source_key": "class:fighter:fighting_style:1:fighting-style",
                 "options": [
                     {
                         "id": choices[0]["options"][0]["id"],
                         "option_type": "feature",
                         "option_source_key": "defense",
-                        "option_ref_id": None,
+                        "feature_id": None,
                         "label": "Defense",
                     },
                     {
                         "id": choices[0]["options"][1]["id"],
                         "option_type": "feature",
                         "option_source_key": "dueling",
-                        "option_ref_id": None,
+                        "feature_id": None,
                         "label": "Dueling",
                     },
                 ],

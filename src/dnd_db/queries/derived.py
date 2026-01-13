@@ -133,13 +133,15 @@ def get_choices_for_class_at_level(
                 "choice_type": group.choice_type,
                 "choose_n": group.choose_n,
                 "level": group.level,
+                "label": group.label,
                 "notes": group.notes,
+                "source_key": group.source_key,
                 "options": [
                     {
                         "id": option.id,
                         "option_type": option.option_type,
                         "option_source_key": option.option_source_key,
-                        "option_ref_id": option.option_ref_id,
+                        "feature_id": option.feature_id,
                         "label": option.label,
                     }
                     for option in group_options

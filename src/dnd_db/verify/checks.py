@@ -531,12 +531,14 @@ def check_relationship_coverage(session: Session) -> list[str]:
         )
 
     feature_with_class_refs = session.exec(
-        select(func.count()).select_from(Feature).where(Feature.class_source_key.is_not(None))
+        select(func.count())
+        .select_from(Feature)
+        .where(Feature.class_source_key.is_not(None))
     ).one()
     class_feature_count = session.exec(
         select(func.count()).select_from(ClassFeatureLink)
     ).one()
-    if feature_with_class_refs > 0 and class_feature_count == 0:
+    if feature_with_class_refs > 0 and class_count > 0 and class_feature_count == 0:
         problems.append(
             "Class feature coverage missing: features reference classes but class_features is empty"
         )
