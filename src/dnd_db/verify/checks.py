@@ -11,6 +11,11 @@ from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.feature import Feature
 from dnd_db.models.import_run import ImportRun
 from dnd_db.models.raw_entity import RawEntity
+from dnd_db.models.relationships import (
+    ClassFeatureLink,
+    SpellClassLink,
+    SubclassFeatureLink,
+)
 from dnd_db.models.source import Source
 from dnd_db.models.spell import Spell
 from dnd_db.models.subclass import Subclass
@@ -39,6 +44,15 @@ def check_counts(session: Session) -> dict[str, Any]:
     class_count = session.exec(select(func.count()).select_from(DndClass)).one()
     subclass_count = session.exec(select(func.count()).select_from(Subclass)).one()
     feature_count = session.exec(select(func.count()).select_from(Feature)).one()
+    class_feature_count = session.exec(
+        select(func.count()).select_from(ClassFeatureLink)
+    ).one()
+    subclass_feature_count = session.exec(
+        select(func.count()).select_from(SubclassFeatureLink)
+    ).one()
+    spell_class_count = session.exec(
+        select(func.count()).select_from(SpellClassLink)
+    ).one()
 
     warnings: list[str] = []
     if raw_spells != spell_count:
@@ -73,6 +87,9 @@ def check_counts(session: Session) -> dict[str, Any]:
         "classes": class_count,
         "subclasses": subclass_count,
         "features": feature_count,
+        "class_features": class_feature_count,
+        "subclass_features": subclass_feature_count,
+        "spell_classes": spell_class_count,
         "warnings": warnings,
     }
 
@@ -154,6 +171,78 @@ def check_duplicates(session: Session) -> list[str]:
         problems.append(
             "Duplicate feature: "
             f"source_id={source_id} source_key={source_key} count={count}"
+        )
+
+    class_feature_duplicates = session.exec(
+        select(
+            ClassFeatureLink.source_id,
+            ClassFeatureLink.class_id,
+            ClassFeatureLink.feature_id,
+            func.coalesce(ClassFeatureLink.level, -1).label("level_key"),
+            func.count().label("count"),
+        )
+        .group_by(
+            ClassFeatureLink.source_id,
+            ClassFeatureLink.class_id,
+            ClassFeatureLink.feature_id,
+            func.coalesce(ClassFeatureLink.level, -1),
+        )
+        .having(func.count() > 1)
+    ).all()
+    for source_id, class_id, feature_id, level_key, count in class_feature_duplicates:
+        problems.append(
+            "Duplicate class feature link: "
+            "source_id="
+            f"{source_id} class_id={class_id} feature_id={feature_id} level={level_key} count={count}"
+        )
+
+    subclass_feature_duplicates = session.exec(
+        select(
+            SubclassFeatureLink.source_id,
+            SubclassFeatureLink.subclass_id,
+            SubclassFeatureLink.feature_id,
+            func.coalesce(SubclassFeatureLink.level, -1).label("level_key"),
+            func.count().label("count"),
+        )
+        .group_by(
+            SubclassFeatureLink.source_id,
+            SubclassFeatureLink.subclass_id,
+            SubclassFeatureLink.feature_id,
+            func.coalesce(SubclassFeatureLink.level, -1),
+        )
+        .having(func.count() > 1)
+    ).all()
+    for (
+        source_id,
+        subclass_id,
+        feature_id,
+        level_key,
+        count,
+    ) in subclass_feature_duplicates:
+        problems.append(
+            "Duplicate subclass feature link: "
+            "source_id="
+            f"{source_id} subclass_id={subclass_id} feature_id={feature_id} level={level_key} count={count}"
+        )
+
+    spell_class_duplicates = session.exec(
+        select(
+            SpellClassLink.source_id,
+            SpellClassLink.spell_id,
+            SpellClassLink.class_id,
+            func.count().label("count"),
+        )
+        .group_by(
+            SpellClassLink.source_id,
+            SpellClassLink.spell_id,
+            SpellClassLink.class_id,
+        )
+        .having(func.count() > 1)
+    ).all()
+    for source_id, spell_id, class_id, count in spell_class_duplicates:
+        problems.append(
+            "Duplicate spell class link: "
+            f"source_id={source_id} spell_id={spell_id} class_id={class_id} count={count}"
         )
 
     return problems
@@ -308,6 +397,153 @@ def check_missing_links(session: Session) -> list[str]:
     return problems
 
 
+def check_relationship_integrity(session: Session) -> list[str]:
+    """Detect missing or mismatched relationship references."""
+    problems: list[str] = []
+
+    missing_class_links = session.exec(
+        select(ClassFeatureLink).where(
+            ~ClassFeatureLink.class_id.in_(select(DndClass.id))
+        )
+    ).all()
+    for link in missing_class_links:
+        problems.append(
+            "Class feature link missing class: "
+            f"id={link.id} class_id={link.class_id}"
+        )
+
+    missing_feature_links = session.exec(
+        select(ClassFeatureLink).where(
+            ~ClassFeatureLink.feature_id.in_(select(Feature.id))
+        )
+    ).all()
+    for link in missing_feature_links:
+        problems.append(
+            "Class feature link missing feature: "
+            f"id={link.id} feature_id={link.feature_id}"
+        )
+
+    missing_subclass_links = session.exec(
+        select(SubclassFeatureLink).where(
+            ~SubclassFeatureLink.subclass_id.in_(select(Subclass.id))
+        )
+    ).all()
+    for link in missing_subclass_links:
+        problems.append(
+            "Subclass feature link missing subclass: "
+            f"id={link.id} subclass_id={link.subclass_id}"
+        )
+
+    missing_subclass_feature_links = session.exec(
+        select(SubclassFeatureLink).where(
+            ~SubclassFeatureLink.feature_id.in_(select(Feature.id))
+        )
+    ).all()
+    for link in missing_subclass_feature_links:
+        problems.append(
+            "Subclass feature link missing feature: "
+            f"id={link.id} feature_id={link.feature_id}"
+        )
+
+    missing_spell_class_links = session.exec(
+        select(SpellClassLink).where(~SpellClassLink.spell_id.in_(select(Spell.id)))
+    ).all()
+    for link in missing_spell_class_links:
+        problems.append(
+            "Spell class link missing spell: "
+            f"id={link.id} spell_id={link.spell_id}"
+        )
+
+    missing_spell_class_links = session.exec(
+        select(SpellClassLink).where(~SpellClassLink.class_id.in_(select(DndClass.id)))
+    ).all()
+    for link in missing_spell_class_links:
+        problems.append(
+            "Spell class link missing class: "
+            f"id={link.id} class_id={link.class_id}"
+        )
+
+    mismatched_class_features = session.exec(
+        select(ClassFeatureLink, DndClass, Feature)
+        .join(DndClass, ClassFeatureLink.class_id == DndClass.id)
+        .join(Feature, ClassFeatureLink.feature_id == Feature.id)
+        .where(
+            (ClassFeatureLink.source_id != DndClass.source_id)
+            | (ClassFeatureLink.source_id != Feature.source_id)
+        )
+    ).all()
+    for link, dnd_class, feature in mismatched_class_features:
+        problems.append(
+            "Class feature link source mismatch: "
+            "link_id="
+            f"{link.id} link_source={link.source_id} "
+            f"class_source={dnd_class.source_id} feature_source={feature.source_id}"
+        )
+
+    mismatched_subclass_features = session.exec(
+        select(SubclassFeatureLink, Subclass, Feature)
+        .join(Subclass, SubclassFeatureLink.subclass_id == Subclass.id)
+        .join(Feature, SubclassFeatureLink.feature_id == Feature.id)
+        .where(
+            (SubclassFeatureLink.source_id != Subclass.source_id)
+            | (SubclassFeatureLink.source_id != Feature.source_id)
+        )
+    ).all()
+    for link, subclass, feature in mismatched_subclass_features:
+        problems.append(
+            "Subclass feature link source mismatch: "
+            "link_id="
+            f"{link.id} link_source={link.source_id} "
+            f"subclass_source={subclass.source_id} feature_source={feature.source_id}"
+        )
+
+    mismatched_spell_classes = session.exec(
+        select(SpellClassLink, Spell, DndClass)
+        .join(Spell, SpellClassLink.spell_id == Spell.id)
+        .join(DndClass, SpellClassLink.class_id == DndClass.id)
+        .where(
+            (SpellClassLink.source_id != Spell.source_id)
+            | (SpellClassLink.source_id != DndClass.source_id)
+        )
+    ).all()
+    for link, spell, dnd_class in mismatched_spell_classes:
+        problems.append(
+            "Spell class link source mismatch: "
+            "link_id="
+            f"{link.id} link_source={link.source_id} "
+            f"spell_source={spell.source_id} class_source={dnd_class.source_id}"
+        )
+
+    return problems
+
+
+def check_relationship_coverage(session: Session) -> list[str]:
+    """Validate relationship counts when source entities exist."""
+    problems: list[str] = []
+    spell_count = session.exec(select(func.count()).select_from(Spell)).one()
+    class_count = session.exec(select(func.count()).select_from(DndClass)).one()
+    spell_class_count = session.exec(
+        select(func.count()).select_from(SpellClassLink)
+    ).one()
+    if spell_count > 0 and class_count > 0 and spell_class_count == 0:
+        problems.append(
+            "Spell class coverage missing: spells and classes exist but spell_classes is empty"
+        )
+
+    feature_with_class_refs = session.exec(
+        select(func.count()).select_from(Feature).where(Feature.class_source_key.is_not(None))
+    ).one()
+    class_feature_count = session.exec(
+        select(func.count()).select_from(ClassFeatureLink)
+    ).one()
+    if feature_with_class_refs > 0 and class_feature_count == 0:
+        problems.append(
+            "Class feature coverage missing: features reference classes but class_features is empty"
+        )
+
+    return problems
+
+
 def check_spell_essentials(session: Session) -> list[str]:
     """Detect spells missing required name/index/level information."""
     problems: list[str] = []
@@ -432,6 +668,8 @@ def run_all_checks(session: Session) -> tuple[bool, dict[str, Any]]:
 
     errors.extend(check_duplicates(session))
     errors.extend(check_missing_links(session))
+    errors.extend(check_relationship_integrity(session))
+    errors.extend(check_relationship_coverage(session))
     errors.extend(check_spell_essentials(session))
     errors.extend(check_class_essentials(session))
     errors.extend(check_subclass_essentials(session))
