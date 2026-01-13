@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 from dnd_db.db.engine import create_db_and_tables
 from dnd_db.db.upsert import upsert_raw_entity
 from dnd_db.ingest.api_client import SrdApiClient
-from dnd_db.models.character_class import CharacterClass
+from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.import_run import ImportRun
 from dnd_db.models.raw_entity import RawEntity
 from dnd_db.models.source import Source
@@ -37,7 +37,7 @@ def _ensure_source(session: Session, name: str, base_url: str | None) -> Source:
     return source
 
 
-def _list_names(values: Any) -> str | None:
+def _list_values(values: Any) -> list[str] | None:
     if not values:
         return None
     if isinstance(values, list):
@@ -49,10 +49,17 @@ def _list_names(values: Any) -> str | None:
                     names.append(str(label))
             elif isinstance(entry, str):
                 names.append(entry)
-        return ",".join(names) if names else None
+        return names if names else None
     if isinstance(values, str):
-        return values
+        return [values]
     return None
+
+
+def _json_list(values: Any) -> str | None:
+    items = _list_values(values)
+    if not items:
+        return None
+    return json.dumps(items, sort_keys=True)
 
 
 def _spellcasting_ability(payload: dict[str, Any]) -> str | None:
@@ -64,15 +71,43 @@ def _spellcasting_ability(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _starting_equipment(payload: dict[str, Any]) -> str | None:
+    equipment = payload.get("starting_equipment")
+    if not isinstance(equipment, list):
+        return None
+    items: list[Any] = []
+    for entry in equipment:
+        if isinstance(entry, dict):
+            item: dict[str, Any] = {}
+            quantity = entry.get("quantity")
+            if quantity is not None:
+                item["quantity"] = quantity
+            equip = entry.get("equipment")
+            if isinstance(equip, dict):
+                name = equip.get("name") or equip.get("index")
+                if name:
+                    item["equipment"] = name
+            elif isinstance(equip, str):
+                item["equipment"] = equip
+            if item:
+                items.append(item)
+        elif isinstance(entry, str):
+            items.append(entry)
+    if not items:
+        return None
+    return json.dumps(items, sort_keys=True)
+
+
 def _normalize_class_fields(payload: dict[str, Any]) -> dict[str, Any]:
     hit_die = payload.get("hit_die")
     return {
         "source_key": payload.get("index"),
         "name": payload.get("name"),
         "hit_die": int(hit_die) if hit_die is not None else None,
-        "proficiencies": _list_names(payload.get("proficiencies")),
-        "saving_throws": _list_names(payload.get("saving_throws")),
+        "proficiencies": _json_list(payload.get("proficiencies")),
+        "saves": _json_list(payload.get("saving_throws")),
         "spellcasting_ability": _spellcasting_ability(payload),
+        "starting_equipment": _starting_equipment(payload),
         "srd": payload.get("srd"),
         "api_url": payload.get("url"),
     }
@@ -85,25 +120,26 @@ def _upsert_class(
     raw_entity: RawEntity,
     payload: dict[str, Any],
     raw_updated: bool,
-) -> tuple[CharacterClass, bool, bool]:
+) -> tuple[DndClass, bool, bool]:
     data = _normalize_class_fields(payload)
-    statement = select(CharacterClass).where(
-        CharacterClass.source_id == source_id,
-        CharacterClass.source_key == data["source_key"],
+    statement = select(DndClass).where(
+        DndClass.source_id == source_id,
+        DndClass.source_key == data["source_key"],
     )
     existing = session.exec(statement).one_or_none()
     now = _utc_now()
 
     if existing is None:
-        character_class = CharacterClass(
+        character_class = DndClass(
             source_id=source_id,
             raw_entity_id=raw_entity.id,
             source_key=data["source_key"],
             name=data["name"],
             hit_die=data["hit_die"],
-            proficiencies=data["proficiencies"],
-            saving_throws=data["saving_throws"],
             spellcasting_ability=data["spellcasting_ability"],
+            saves=data["saves"],
+            proficiencies=data["proficiencies"],
+            starting_equipment=data["starting_equipment"],
             srd=data["srd"],
             api_url=data["api_url"],
             created_at=now,
@@ -121,9 +157,10 @@ def _upsert_class(
     existing.raw_entity_id = raw_entity.id
     existing.name = data["name"]
     existing.hit_die = data["hit_die"]
-    existing.proficiencies = data["proficiencies"]
-    existing.saving_throws = data["saving_throws"]
     existing.spellcasting_ability = data["spellcasting_ability"]
+    existing.saves = data["saves"]
+    existing.proficiencies = data["proficiencies"]
+    existing.starting_equipment = data["starting_equipment"]
     existing.srd = data["srd"]
     existing.api_url = data["api_url"]
     existing.updated_at = now
