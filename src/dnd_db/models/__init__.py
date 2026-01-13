@@ -1,6 +1,7 @@
 """Data models for dnd_db."""
 
 from dnd_db.models.character_class import CharacterClass
+from dnd_db.models.choices import ChoiceGroup, ChoiceOption, Prerequisite
 from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.feature import Feature
 from dnd_db.models.import_run import ImportRun
@@ -16,9 +17,12 @@ from dnd_db.models.subclass import Subclass
 
 __all__ = [
     "CharacterClass",
+    "ChoiceGroup",
+    "ChoiceOption",
     "DndClass",
     "Feature",
     "ImportRun",
+    "Prerequisite",
     "RawEntity",
     "ClassFeatureLink",
     "SpellClassLink",

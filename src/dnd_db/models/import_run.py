@@ -25,6 +25,7 @@ class ImportRun(SQLModel, table=True):
     source_name: Optional[str] = Field(default=None, nullable=True)
     run_key: Optional[str] = Field(default=None, index=True, nullable=True, unique=True)
     source_version: Optional[str] = Field(default=None, nullable=True)
+    phase: Optional[str] = Field(default=None, index=True, nullable=True)
     notes: Optional[str] = Field(default=None, nullable=True)
     status: str = Field(index=True)
     created_rows: int = Field(default=0)
