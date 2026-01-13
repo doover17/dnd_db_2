@@ -14,6 +14,7 @@ from dnd_db.ingest.load_choices import load_choices
 from dnd_db.models.choices import ChoiceGroup, ChoiceOption
 from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.feature import Feature
+from dnd_db.models.spell import Spell
 from dnd_db.models.source import Source
 
 
@@ -162,3 +163,187 @@ def test_load_choices_idempotent(tmp_path: Path) -> None:
     summary_third = load_choices(engine=engine, source_name="5e-bits")
     assert summary_third["choice_groups_created"] == 0
     assert summary_third["choice_options_created"] == 1
+
+
+def test_load_choices_v2_types(tmp_path: Path) -> None:
+    db_path = tmp_path / "choices-v2.db"
+    engine = get_engine(str(db_path))
+    create_db_and_tables(engine)
+
+    with Session(engine) as session:
+        source = Source(name="5e-bits", base_url="https://example.com")
+        session.add(source)
+        session.commit()
+        session.refresh(source)
+
+        wizard_payload = {
+            "index": "wizard",
+            "name": "Wizard",
+            "spell_choices": [
+                {
+                    "type": "spell",
+                    "choose": 2,
+                    "from": [
+                        {
+                            "option_type": "spell",
+                            "index": "magic-missile",
+                            "name": "Magic Missile",
+                        },
+                        {
+                            "option_type": "spell",
+                            "index": "shield",
+                            "name": "Shield",
+                        },
+                    ],
+                }
+            ],
+        }
+
+        raw_wizard, _, _ = upsert_raw_entity(
+            session,
+            source_id=source.id,
+            entity_type="class",
+            source_key="wizard",
+            payload=wizard_payload,
+            name=wizard_payload.get("name"),
+        )
+
+        session.add(
+            DndClass(
+                source_id=source.id,
+                raw_entity_id=raw_wizard.id,
+                source_key="wizard",
+                name="Wizard",
+            )
+        )
+
+        expertise_payload = {
+            "index": "expertise",
+            "name": "Expertise",
+            "choices": [
+                {
+                    "name": "Expertise",
+                    "choose": 2,
+                    "from": [
+                        {
+                            "option_type": "reference",
+                            "item": {
+                                "index": "skill-acrobatics",
+                                "name": "Skill: Acrobatics",
+                                "type": "proficiency",
+                            },
+                        },
+                        {
+                            "option_type": "reference",
+                            "item": {
+                                "index": "skill-stealth",
+                                "name": "Skill: Stealth",
+                                "type": "proficiency",
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+
+        raw_expertise, _, _ = upsert_raw_entity(
+            session,
+            source_id=source.id,
+            entity_type="feature",
+            source_key="expertise",
+            payload=expertise_payload,
+            name=expertise_payload.get("name"),
+        )
+
+        session.add(
+            Feature(
+                source_id=source.id,
+                raw_entity_id=raw_expertise.id,
+                source_key="expertise",
+                name="Expertise",
+                level=1,
+                class_source_key="rogue",
+            )
+        )
+
+        invocation_payload = {
+            "index": "eldritch-invocations",
+            "name": "Eldritch Invocations",
+            "choices": [
+                {
+                    "name": "Eldritch Invocation",
+                    "choose": 1,
+                    "from": [
+                        {
+                            "option_type": "feature",
+                            "index": "agonizing-blast",
+                            "name": "Agonizing Blast",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        raw_invocations, _, _ = upsert_raw_entity(
+            session,
+            source_id=source.id,
+            entity_type="feature",
+            source_key="eldritch-invocations",
+            payload=invocation_payload,
+            name=invocation_payload.get("name"),
+        )
+
+        session.add(
+            Feature(
+                source_id=source.id,
+                raw_entity_id=raw_invocations.id,
+                source_key="eldritch-invocations",
+                name="Eldritch Invocations",
+                level=2,
+                class_source_key="warlock",
+            )
+        )
+        session.add(
+            Feature(
+                source_id=source.id,
+                raw_entity_id=None,
+                source_key="agonizing-blast",
+                name="Agonizing Blast",
+                level=2,
+                class_source_key="warlock",
+            )
+        )
+
+        session.add_all(
+            [
+                Spell(
+                    source_id=source.id,
+                    raw_entity_id=None,
+                    source_key="magic-missile",
+                    name="Magic Missile",
+                    level=1,
+                ),
+                Spell(
+                    source_id=source.id,
+                    raw_entity_id=None,
+                    source_key="shield",
+                    name="Shield",
+                    level=1,
+                ),
+            ]
+        )
+        session.commit()
+
+    summary = load_choices(engine=engine, source_name="5e-bits")
+    assert summary["choice_groups_created"] == 3
+    assert summary["choice_options_created"] == 5
+
+    with Session(engine) as session:
+        groups = session.exec(select(ChoiceGroup)).all()
+        types = {group.choice_type for group in groups}
+        assert {"spell", "expertise", "invocation"} <= types
+
+        spell_options = session.exec(
+            select(ChoiceOption).where(ChoiceOption.option_type == "spell")
+        ).all()
+        assert len(spell_options) == 2

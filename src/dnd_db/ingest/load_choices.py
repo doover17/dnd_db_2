@@ -87,6 +87,8 @@ def _normalize_option_type(value: Any) -> str:
     candidate = str(value).strip().lower()
     if candidate in {"feature", "class_feature", "subclass_feature"}:
         return "feature"
+    if candidate in {"spell", "spells"}:
+        return "spell"
     return "string"
 
 
@@ -133,6 +135,12 @@ def _extract_reference_type(option: dict[str, Any]) -> str | None:
         item_type = item.get("type")
         if isinstance(item_type, str):
             return item_type
+        item_url = item.get("url")
+        if isinstance(item_url, str) and "/api/spells/" in item_url:
+            return "spell"
+    option_url = option.get("url")
+    if isinstance(option_url, str) and "/api/spells/" in option_url:
+        return "spell"
     return None
 
 
@@ -214,6 +222,74 @@ def _infer_fighting_style(
         if "fighting style" in option_text or "fighting-style" in option_text:
             return True
     return False
+
+
+def _choice_text(choice_node: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in ("type", "name", "label", "title", "desc"):
+        value = choice_node.get(key)
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, list):
+            parts.extend(entry for entry in value if isinstance(entry, str))
+    return " ".join(parts).lower()
+
+
+def _choice_keys_text(choice_node: dict[str, Any]) -> str:
+    return " ".join(str(key) for key in choice_node.keys()).lower()
+
+
+def _owner_text(owner_name: str | None, owner_key: str | None) -> str:
+    return " ".join(token for token in [owner_name or "", owner_key or ""] if token).lower()
+
+
+def _options_have_spell_reference(options: list[Any]) -> bool:
+    for option in options:
+        if isinstance(option, dict):
+            option_type = option.get("option_type") or option.get("type")
+            if isinstance(option_type, str) and "spell" in option_type.lower():
+                return True
+            ref_type = _extract_reference_type(option)
+            if isinstance(ref_type, str) and ref_type.lower() == "spell":
+                return True
+            item = option.get("item")
+            if isinstance(item, dict):
+                item_url = item.get("url")
+                if isinstance(item_url, str) and "/api/spells/" in item_url:
+                    return True
+        elif isinstance(option, str) and "spell" in option.lower():
+            return True
+    return False
+
+
+def _infer_choice_type(
+    choice_node: dict[str, Any],
+    options: list[Any],
+    owner_name: str | None,
+    owner_key: str | None,
+) -> str:
+    if _infer_fighting_style(choice_node, options, owner_name, owner_key):
+        return "fighting_style"
+
+    choice_text = _choice_text(choice_node)
+    key_text = _choice_keys_text(choice_node)
+    owner_text = _owner_text(owner_name, owner_key)
+
+    if "invocation" in choice_text or "invocation" in owner_text:
+        return "invocation"
+    if "expertise" in choice_text or "expertise" in owner_text:
+        return "expertise"
+    if (
+        "spell" in choice_text
+        or "cantrip" in choice_text
+        or "spell" in key_text
+        or "cantrip" in key_text
+        or "spell" in owner_text
+        or "cantrip" in owner_text
+        or _options_have_spell_reference(options)
+    ):
+        return "spell"
+    return "generic"
 
 
 def _build_choice_source_key(
@@ -333,14 +409,17 @@ def load_choices(*, engine, source_name: str = "5e-bits") -> dict[str, int]:
                     notes = _choice_notes(choice)
                     label = _choice_label(choice)
                     options = _extract_options(choice)
-                    is_fighting_style = _infer_fighting_style(
+                    choice_type = _infer_choice_type(
                         choice, options, getattr(owner, "name", None), owner.source_key
                     )
-                    choice_type = (
-                        "fighting_style" if is_fighting_style else "generic"
-                    )
-                    if is_fighting_style and not label:
+                    if choice_type == "fighting_style" and not label:
                         label = "Fighting Style"
+                    if choice_type == "expertise" and not label:
+                        label = "Expertise"
+                    if choice_type == "invocation" and not label:
+                        label = "Invocations"
+                    if choice_type == "spell" and not label:
+                        label = "Spell Choice"
                     source_key = _build_choice_source_key(
                         owner_type=owner_type,
                         owner_key=owner.source_key,
@@ -375,8 +454,14 @@ def load_choices(*, engine, source_name: str = "5e-bits") -> dict[str, int]:
                         group_lookup[group_key] = group
 
                     for option in options:
+                        if choice_type in {"fighting_style", "invocation"}:
+                            default_type = "feature"
+                        elif choice_type == "spell":
+                            default_type = "spell"
+                        else:
+                            default_type = "string"
                         option_type_raw, option_source_key, label = _parse_option(
-                            option, "feature" if choice_type == "fighting_style" else "string"
+                            option, default_type
                         )
                         option_type = _normalize_option_type(option_type_raw)
                         option_key = (

@@ -8,6 +8,7 @@ from sqlalchemy import func
 from dnd_db.models.choices import ChoiceGroup, ChoiceOption
 from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.feature import Feature
+from dnd_db.models.spell import Spell
 
 
 def verify_choices(session: Session) -> dict[str, list[str]]:
@@ -132,6 +133,26 @@ def verify_choices(session: Session) -> dict[str, list[str]]:
         errors.append(
             "Choice option missing feature: "
             f"id={option.id} feature_id={option.feature_id}"
+        )
+
+    missing_spell_options = session.exec(
+        select(ChoiceOption)
+        .join(ChoiceGroup, ChoiceOption.choice_group_id == ChoiceGroup.id)
+        .outerjoin(
+            Spell,
+            (Spell.source_key == ChoiceOption.option_source_key)
+            & (Spell.source_id == ChoiceGroup.source_id),
+        )
+        .where(
+            ChoiceOption.option_type == "spell",
+            ChoiceOption.option_source_key.is_not(None),
+            Spell.id.is_(None),
+        )
+    ).all()
+    for option in missing_spell_options:
+        errors.append(
+            "Choice option missing spell: "
+            f"id={option.id} option_source_key={option.option_source_key}"
         )
 
     return {"errors": errors, "warnings": warnings}
