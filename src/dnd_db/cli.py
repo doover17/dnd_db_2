@@ -17,6 +17,7 @@ from dnd_db.ingest.import_features import import_features
 from dnd_db.ingest.import_spells import import_spells
 from dnd_db.ingest.import_subclasses import import_subclasses
 from dnd_db.ingest.load_choices import load_choices
+from dnd_db.ingest.load_prereqs import load_prereqs
 from dnd_db.ingest.load_relationships import load_relationships
 from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.import_run import ImportRun
@@ -29,6 +30,7 @@ from dnd_db.models.source import Source
 from dnd_db.queries import get_class_features_at_level
 from dnd_db.verify.checks import run_all_checks
 from dnd_db.verify.choices import verify_choices
+from dnd_db.verify.prereqs import verify_prereqs
 
 
 def _init_db() -> None:
@@ -354,6 +356,16 @@ def _load_choices(source_name: str) -> None:
     print(f"- unresolved_feature_refs: {summary['unresolved_feature_refs']}")
 
 
+def _load_prereqs(source_name: str) -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    summary = load_prereqs(engine=engine, source_name=source_name)
+    print(f"Database path: {get_db_path()}")
+    print("Prerequisites loaded:")
+    print(f"- prereqs_created: {summary['prereqs_created']}")
+    print(f"- missing_refs: {summary['missing_refs']}")
+
+
 def _verify_choices() -> None:
     engine = get_engine()
     create_db_and_tables(engine)
@@ -371,6 +383,25 @@ def _verify_choices() -> None:
             print(f"- {error}")
         raise SystemExit(1)
     print("No choice verification errors detected.")
+
+
+def _verify_prereqs() -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    with Session(engine) as session:
+        report = verify_prereqs(session)
+    warnings = report.get("warnings", [])
+    if warnings:
+        print("Prerequisite verification warnings:")
+        for warning in warnings:
+            print(f"- {warning}")
+    errors = report.get("errors", [])
+    if errors:
+        print("Prerequisite verification errors:")
+        for error in errors:
+            print(f"- {error}")
+        raise SystemExit(1)
+    print("No prerequisite verification errors detected.")
 
 
 def _rebuild_relationships(source_name: str, truncate: bool) -> None:
@@ -548,6 +579,19 @@ def build_parser() -> argparse.ArgumentParser:
         "verify-choices", help="Verify choice group and option integrity"
     )
 
+    load_prereqs_parser = subparsers.add_parser(
+        "load-prereqs", help="Load prerequisites"
+    )
+    load_prereqs_parser.add_argument(
+        "--source-name",
+        default="5e-bits",
+        help="Source name to load prerequisites for",
+    )
+
+    subparsers.add_parser(
+        "verify-prereqs", help="Verify prerequisite integrity"
+    )
+
     query_parser = subparsers.add_parser(
         "query", help="Run read-only derived queries"
     )
@@ -602,6 +646,10 @@ def main() -> None:
         _load_choices(args.source_name)
     elif args.command == "verify-choices":
         _verify_choices()
+    elif args.command == "load-prereqs":
+        _load_prereqs(args.source_name)
+    elif args.command == "verify-prereqs":
+        _verify_prereqs()
     elif args.command == "query":
         if args.query_command == "class-features":
             _query_class_features(args.class_name, args.level)

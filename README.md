@@ -43,6 +43,18 @@ python -m dnd_db.cli import-spells
 python -m dnd_db.cli verify
 ```
 
+### Load prerequisites
+
+```bash
+python -m dnd_db.cli load-prereqs
+```
+
+### Verify prerequisites
+
+```bash
+python -m dnd_db.cli verify-prereqs
+```
+
 ### Tests
 
 ```bash

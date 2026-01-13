@@ -32,26 +32,11 @@ For each task:
 - Verification framework + CI/lint/test guardrails
 - TASK 1 — Choices v1 (Fighting Style + Generic)
 - TASK 2 — Choices v2 (Spell choices, Expertise, Invocations)
+- TASK 3 — Prerequisites v1 (As-declared only)
 
 ---
 
 ### Remaining Tasks (Execute in Order)
-
-## TASK 3 — Prerequisites v1 (As-declared only)
-
-Deliverables:
-
-- Add Prerequisite table (applies_to: feature or choice_group)
-- Loader reads raw JSON for simple prereqs (level, class/subclass, ability score, feature prereq if present)
-- Add CLI: `load-prereqs`, `verify-prereqs`
-- Tests: create, rerun, update
-
-Scope:
-
-- Only what’s explicitly present in raw JSON
-- No inference engine
-
----
 
 ## TASK 4 — Grants/Effects v1 (What features/choices give you)
 
