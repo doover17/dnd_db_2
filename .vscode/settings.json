@@ -6,7 +6,8 @@
         "pytest",
         "spellbooks",
         "sqlalchemy",
-        "sqlmodel"
+        "sqlmodel",
+        "venv"
     ],
     "python-envs.pythonProjects": [],
     "python-envs.defaultEnvManager": "ms-python.python:venv"

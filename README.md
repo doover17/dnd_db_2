@@ -45,13 +45,13 @@ pip install -e ".[dev]"
 python -m dnd_db.cli import-spells
 ```
 
-2) Run verification:
+1) Run verification:
 
 ```bash
 python -m dnd_db.cli verify
 ```
 
-3) Load derived layers (choices, prereqs, grants) as needed:
+1) Load derived layers (choices, prereqs, grants) as needed:
 
 ```bash
 python -m dnd_db.cli load-choices
