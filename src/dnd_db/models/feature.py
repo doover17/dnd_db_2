@@ -20,6 +20,12 @@ class Feature(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("source_id", "source_key", name="uq_features_source_key"),
         Index("ix_features_name", "name"),
+        Index(
+            "ix_features_class_subclass_level",
+            "class_source_key",
+            "subclass_source_key",
+            "level",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -35,9 +41,7 @@ class Feature(SQLModel, table=True):
     subclass_source_key: Optional[str] = Field(
         default=None, sa_column=Column(String, nullable=True)
     )
-    feature_desc: Optional[str] = Field(
-        default=None, sa_column=Column(Text, nullable=True)
-    )
+    desc: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     srd: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
     api_url: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
 

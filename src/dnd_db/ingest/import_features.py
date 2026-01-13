@@ -69,7 +69,7 @@ def _normalize_feature_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "level": int(level) if level is not None else None,
         "class_source_key": _class_source_key(payload),
         "subclass_source_key": _subclass_source_key(payload),
-        "feature_desc": _join_paragraphs(payload.get("desc")),
+        "desc": _join_paragraphs(payload.get("desc")),
         "srd": payload.get("srd"),
         "api_url": payload.get("url"),
     }
@@ -100,7 +100,7 @@ def _upsert_feature(
             level=data["level"],
             class_source_key=data["class_source_key"],
             subclass_source_key=data["subclass_source_key"],
-            feature_desc=data["feature_desc"],
+            desc=data["desc"],
             srd=data["srd"],
             api_url=data["api_url"],
             created_at=now,
@@ -120,7 +120,7 @@ def _upsert_feature(
     existing.level = data["level"]
     existing.class_source_key = data["class_source_key"]
     existing.subclass_source_key = data["subclass_source_key"]
-    existing.feature_desc = data["feature_desc"]
+    existing.desc = data["desc"]
     existing.srd = data["srd"]
     existing.api_url = data["api_url"]
     existing.updated_at = now

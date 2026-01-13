@@ -423,6 +423,12 @@ def run_all_checks(session: Session) -> tuple[bool, dict[str, Any]]:
             "raw_entities subclass="
             f"{counts['raw_entities_subclass']} subclasses={counts['subclasses']}"
         )
+    if counts["raw_entities_feature"] != counts["features"]:
+        errors.append(
+            "Feature count mismatch: "
+            "raw_entities feature="
+            f"{counts['raw_entities_feature']} features={counts['features']}"
+        )
 
     errors.extend(check_duplicates(session))
     errors.extend(check_missing_links(session))
