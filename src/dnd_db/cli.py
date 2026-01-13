@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from sqlalchemy import inspect
+from sqlalchemy import delete, inspect
 from sqlmodel import Session, select
 
 from dnd_db.config import get_api_base_url, get_db_path
@@ -16,7 +16,13 @@ from dnd_db.ingest.import_classes import import_classes
 from dnd_db.ingest.import_features import import_features
 from dnd_db.ingest.import_spells import import_spells
 from dnd_db.ingest.import_subclasses import import_subclasses
+from dnd_db.ingest.load_relationships import load_relationships
 from dnd_db.models.import_run import ImportRun
+from dnd_db.models.relationships import (
+    ClassFeatureLink,
+    SpellClassLink,
+    SubclassFeatureLink,
+)
 from dnd_db.models.source import Source
 from dnd_db.verify.checks import run_all_checks
 
@@ -302,6 +308,9 @@ def _verify() -> None:
     print(f"- classes: {counts['classes']}")
     print(f"- subclasses: {counts['subclasses']}")
     print(f"- features: {counts['features']}")
+    print(f"- class_features: {counts['class_features']}")
+    print(f"- subclass_features: {counts['subclass_features']}")
+    print(f"- spell_classes: {counts['spell_classes']}")
 
     warnings = report.get("warnings", [])
     if warnings:
@@ -316,6 +325,44 @@ def _verify() -> None:
             print(f"- {error}")
         raise SystemExit(1)
     print("No errors detected.")
+
+
+def _load_relationships(source_name: str) -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    summary = load_relationships(engine=engine, source_name=source_name)
+    print(f"Database path: {get_db_path()}")
+    print("Relationships loaded:")
+    print(f"- class_features_created: {summary['class_features_created']}")
+    print(f"- subclass_features_created: {summary['subclass_features_created']}")
+    print(f"- spell_classes_created: {summary['spell_classes_created']}")
+    print(f"- missing_refs_count: {summary['missing_refs_count']}")
+
+
+def _rebuild_relationships(source_name: str, truncate: bool) -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    if truncate:
+        with Session(engine) as session:
+            source = session.exec(
+                select(Source).where(Source.name == source_name)
+            ).one_or_none()
+            if source is None:
+                raise ValueError("Run importers first: source not found.")
+            session.exec(
+                delete(ClassFeatureLink).where(ClassFeatureLink.source_id == source.id)
+            )
+            session.exec(
+                delete(SubclassFeatureLink).where(
+                    SubclassFeatureLink.source_id == source.id
+                )
+            )
+            session.exec(
+                delete(SpellClassLink).where(SpellClassLink.source_id == source.id)
+            )
+            session.commit()
+            print(f"Truncated relationships for source {source.name} ({source.id}).")
+    _load_relationships(source_name)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -416,6 +463,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("verify", help="Run verification checks")
 
+    load_relationships_parser = subparsers.add_parser(
+        "load-relationships", help="Load relationship join tables"
+    )
+    load_relationships_parser.add_argument(
+        "--source-name",
+        default="5e-bits",
+        help="Source name to load relationships for",
+    )
+
+    rebuild_relationships_parser = subparsers.add_parser(
+        "rebuild-relationships", help="Rebuild relationship join tables"
+    )
+    rebuild_relationships_parser.add_argument(
+        "--source-name",
+        default="5e-bits",
+        help="Source name to load relationships for",
+    )
+    rebuild_relationships_parser.add_argument(
+        "--truncate",
+        action="store_true",
+        help="Delete existing relationships for the source before loading",
+    )
+
     return parser
 
 
@@ -447,6 +517,10 @@ def main() -> None:
         _import_features(args.base_url, args.refresh, args.limit)
     elif args.command == "verify":
         _verify()
+    elif args.command == "load-relationships":
+        _load_relationships(args.source_name)
+    elif args.command == "rebuild-relationships":
+        _rebuild_relationships(args.source_name, args.truncate)
     else:
         parser.error(f"Unknown command: {args.command}")
 
