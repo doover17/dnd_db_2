@@ -54,21 +54,13 @@ def _class_source_key(payload: dict[str, Any]) -> str | None:
     return None
 
 
-def _spellcasting_ability(payload: dict[str, Any]) -> str | None:
-    ability = payload.get("spellcasting_ability")
-    if isinstance(ability, dict):
-        return ability.get("name") or ability.get("index")
-    return None
-
-
 def _normalize_subclass_fields(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "source_key": payload.get("index"),
         "name": payload.get("name"),
         "class_source_key": _class_source_key(payload),
         "subclass_flavor": payload.get("subclass_flavor"),
-        "subclass_desc": _join_paragraphs(payload.get("desc")),
-        "spellcasting_ability": _spellcasting_ability(payload),
+        "desc": _join_paragraphs(payload.get("desc")),
         "srd": payload.get("srd"),
         "api_url": payload.get("url"),
     }
@@ -98,8 +90,7 @@ def _upsert_subclass(
             name=data["name"],
             class_source_key=data["class_source_key"],
             subclass_flavor=data["subclass_flavor"],
-            subclass_desc=data["subclass_desc"],
-            spellcasting_ability=data["spellcasting_ability"],
+            desc=data["desc"],
             srd=data["srd"],
             api_url=data["api_url"],
             created_at=now,
@@ -118,8 +109,7 @@ def _upsert_subclass(
     existing.name = data["name"]
     existing.class_source_key = data["class_source_key"]
     existing.subclass_flavor = data["subclass_flavor"]
-    existing.subclass_desc = data["subclass_desc"]
-    existing.spellcasting_ability = data["spellcasting_ability"]
+    existing.desc = data["desc"]
     existing.srd = data["srd"]
     existing.api_url = data["api_url"]
     existing.updated_at = now
