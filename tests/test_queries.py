@@ -11,6 +11,7 @@ from dnd_db.db.engine import create_db_and_tables, get_engine
 from dnd_db.models.choices import ChoiceGroup, ChoiceOption
 from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.feature import Feature
+from dnd_db.models.grants import GrantProficiency
 from dnd_db.models.relationships import (
     ClassFeatureLink,
     SpellClassLink,
@@ -23,6 +24,7 @@ from dnd_db.queries import (
     get_all_available_features,
     get_choices_for_class_at_level,
     get_class_features_at_level,
+    get_granted_proficiencies_for_class_level,
     get_spell_list_for_class,
     get_subclass_features_at_level,
 )
@@ -184,6 +186,28 @@ def _seed_query_data(session: Session) -> dict[str, int]:
     session.add_all(options)
     session.commit()
 
+    session.add(
+        GrantProficiency(
+            source_id=source.id,
+            owner_type="class",
+            owner_id=fighter.id,
+            proficiency_type="starting_proficiencies",
+            proficiency_key="armor-light",
+            label="Light Armor",
+        )
+    )
+    session.add(
+        GrantProficiency(
+            source_id=source.id,
+            owner_type="feature",
+            owner_id=action_surge.id,
+            proficiency_type="tool_proficiencies",
+            proficiency_key="artisan-tools",
+            label="Artisan's Tools",
+        )
+    )
+    session.commit()
+
     return {"class_id": fighter.id, "subclass_id": champion.id}
 
 
@@ -271,6 +295,34 @@ def test_queries(tmp_path: Path) -> None:
                         "label": "Dueling",
                     },
                 ],
+            }
+        ]
+
+        level_one_profs = get_granted_proficiencies_for_class_level(
+            session, ids["class_id"], 1
+        )
+        assert level_one_profs == [
+            {
+                "id": level_one_profs[0]["id"],
+                "owner_type": "class",
+                "owner_id": ids["class_id"],
+                "proficiency_type": "starting_proficiencies",
+                "proficiency_key": "armor-light",
+                "label": "Light Armor",
+            }
+        ]
+
+        level_two_profs = get_granted_proficiencies_for_class_level(
+            session, ids["class_id"], 2
+        )
+        assert level_two_profs == [
+            {
+                "id": level_two_profs[0]["id"],
+                "owner_type": "feature",
+                "owner_id": level_two_profs[0]["owner_id"],
+                "proficiency_type": "tool_proficiencies",
+                "proficiency_key": "artisan-tools",
+                "label": "Artisan's Tools",
             }
         ]
 

@@ -32,6 +32,7 @@ def upsert_raw_entity(
     name: str | None = None,
     srd: bool | None = None,
     url: str | None = None,
+    commit: bool = True,
 ) -> tuple[RawEntity, bool, bool]:
     """Insert or update a raw entity, returning (entity, created, updated)."""
     raw_hash = canonical_json_hash(payload)
@@ -58,15 +59,21 @@ def upsert_raw_entity(
             updated_at=now,
         )
         session.add(entity)
-        session.commit()
-        session.refresh(entity)
+        if commit:
+            session.commit()
+            session.refresh(entity)
+        else:
+            session.flush()
         return entity, True, False
 
     if existing.raw_hash == raw_hash:
         existing.retrieved_at = now
         session.add(existing)
-        session.commit()
-        session.refresh(existing)
+        if commit:
+            session.commit()
+            session.refresh(existing)
+        else:
+            session.flush()
         return existing, False, False
 
     existing.raw_json = payload
@@ -77,6 +84,9 @@ def upsert_raw_entity(
     existing.retrieved_at = now
     existing.updated_at = now
     session.add(existing)
-    session.commit()
-    session.refresh(existing)
+    if commit:
+        session.commit()
+        session.refresh(existing)
+    else:
+        session.flush()
     return existing, False, True

@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.feature import Feature
 from dnd_db.models.import_run import ImportRun
+from dnd_db.models.import_snapshot import ImportSnapshot
 from dnd_db.models.raw_entity import RawEntity
 from dnd_db.models.relationships import (
     ClassFeatureLink,
@@ -25,6 +26,9 @@ def check_counts(session: Session) -> dict[str, Any]:
     """Return counts for core tables and warn on mismatches."""
     source_count = session.exec(select(func.count()).select_from(Source)).one()
     import_run_count = session.exec(select(func.count()).select_from(ImportRun)).one()
+    snapshot_count = session.exec(
+        select(func.count()).select_from(ImportSnapshot)
+    ).one()
     raw_total = session.exec(select(func.count()).select_from(RawEntity)).one()
     raw_spells = session.exec(
         select(func.count()).select_from(RawEntity).where(RawEntity.entity_type == "spell")
@@ -78,6 +82,7 @@ def check_counts(session: Session) -> dict[str, Any]:
     return {
         "sources": source_count,
         "import_runs": import_run_count,
+        "import_snapshots": snapshot_count,
         "raw_entities": raw_total,
         "raw_entities_spell": raw_spells,
         "raw_entities_class": raw_classes,

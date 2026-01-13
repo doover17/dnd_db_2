@@ -25,6 +25,7 @@ class RawEntity(SQLModel, table=True):
             name="uq_raw_entities_source_type_key",
         ),
         Index("ix_raw_entities_entity_type_name", "entity_type", "name"),
+        Index("ix_raw_entities_source_type", "source_id", "entity_type"),
         Index("ix_raw_entities_raw_hash", "raw_hash"),
     )
 
