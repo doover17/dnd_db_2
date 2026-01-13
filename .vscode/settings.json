@@ -1,8 +1,10 @@
 {
     "cSpell.words": [
+        "Elandra",
         "prereq",
         "prereqs",
         "pytest",
+        "spellbooks",
         "sqlalchemy",
         "sqlmodel"
     ]
