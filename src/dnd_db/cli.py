@@ -18,6 +18,7 @@ from dnd_db.ingest.import_spells import import_spells
 from dnd_db.ingest.import_subclasses import import_subclasses
 from dnd_db.ingest.load_choices import load_choices
 from dnd_db.ingest.load_relationships import load_relationships
+from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.import_run import ImportRun
 from dnd_db.models.relationships import (
     ClassFeatureLink,
@@ -25,6 +26,7 @@ from dnd_db.models.relationships import (
     SubclassFeatureLink,
 )
 from dnd_db.models.source import Source
+from dnd_db.queries import get_class_features_at_level
 from dnd_db.verify.checks import run_all_checks
 from dnd_db.verify.choices import verify_choices
 
@@ -393,6 +395,21 @@ def _rebuild_relationships(source_name: str, truncate: bool) -> None:
     _load_relationships(source_name)
 
 
+def _query_class_features(class_name: str, level: int) -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    with Session(engine) as session:
+        dnd_class = session.exec(
+            select(DndClass).where(
+                (DndClass.source_key == class_name) | (DndClass.name == class_name)
+            )
+        ).one_or_none()
+        if dnd_class is None:
+            raise ValueError(f"Unknown class: {class_name}")
+        features = get_class_features_at_level(session, dnd_class.id, level)
+    print(json.dumps(features, indent=2, sort_keys=True))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="dnd_db CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -527,6 +544,21 @@ def build_parser() -> argparse.ArgumentParser:
         "verify-choices", help="Verify choice group and option integrity"
     )
 
+    query_parser = subparsers.add_parser(
+        "query", help="Run read-only derived queries"
+    )
+    query_subparsers = query_parser.add_subparsers(
+        dest="query_command", required=True
+    )
+
+    class_features_parser = query_subparsers.add_parser(
+        "class-features", help="List class features at a level"
+    )
+    class_features_parser.add_argument(
+        "--class", dest="class_name", required=True, help="Class name or source key"
+    )
+    class_features_parser.add_argument("--level", type=int, required=True)
+
     return parser
 
 
@@ -566,6 +598,11 @@ def main() -> None:
         _load_choices(args.source_name)
     elif args.command == "verify-choices":
         _verify_choices()
+    elif args.command == "query":
+        if args.query_command == "class-features":
+            _query_class_features(args.class_name, args.level)
+        else:
+            parser.error(f"Unknown query command: {args.query_command}")
     else:
         parser.error(f"Unknown command: {args.command}")
 
