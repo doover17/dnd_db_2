@@ -16,6 +16,7 @@ from dnd_db.ingest.import_classes import import_classes
 from dnd_db.ingest.import_features import import_features
 from dnd_db.ingest.import_spells import import_spells
 from dnd_db.ingest.import_subclasses import import_subclasses
+from dnd_db.ingest.load_choices import load_choices
 from dnd_db.ingest.load_relationships import load_relationships
 from dnd_db.models.import_run import ImportRun
 from dnd_db.models.relationships import (
@@ -25,6 +26,7 @@ from dnd_db.models.relationships import (
 )
 from dnd_db.models.source import Source
 from dnd_db.verify.checks import run_all_checks
+from dnd_db.verify.choices import verify_choices
 
 
 def _init_db() -> None:
@@ -339,6 +341,32 @@ def _load_relationships(source_name: str) -> None:
     print(f"- missing_refs_count: {summary['missing_refs_count']}")
 
 
+def _load_choices(source_name: str) -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    summary = load_choices(engine=engine, source_name=source_name)
+    print(f"Database path: {get_db_path()}")
+    print("Choices loaded:")
+    print(f"- choice_groups_created: {summary['choice_groups_created']}")
+    print(f"- choice_options_created: {summary['choice_options_created']}")
+    print(f"- missing_owner_count: {summary['missing_owner_count']}")
+    print(f"- missing_option_refs_count: {summary['missing_option_refs_count']}")
+
+
+def _verify_choices() -> None:
+    engine = get_engine()
+    create_db_and_tables(engine)
+    with Session(engine) as session:
+        report = verify_choices(session)
+    errors = report.get("errors", [])
+    if errors:
+        print("Choice verification errors:")
+        for error in errors:
+            print(f"- {error}")
+        raise SystemExit(1)
+    print("No choice verification errors detected.")
+
+
 def _rebuild_relationships(source_name: str, truncate: bool) -> None:
     engine = get_engine()
     create_db_and_tables(engine)
@@ -486,6 +514,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Delete existing relationships for the source before loading",
     )
 
+    load_choices_parser = subparsers.add_parser(
+        "load-choices", help="Load choice groups and options"
+    )
+    load_choices_parser.add_argument(
+        "--source-name",
+        default="5e-bits",
+        help="Source name to load choices for",
+    )
+
+    subparsers.add_parser(
+        "verify-choices", help="Verify choice group and option integrity"
+    )
+
     return parser
 
 
@@ -521,6 +562,10 @@ def main() -> None:
         _load_relationships(args.source_name)
     elif args.command == "rebuild-relationships":
         _rebuild_relationships(args.source_name, args.truncate)
+    elif args.command == "load-choices":
+        _load_choices(args.source_name)
+    elif args.command == "verify-choices":
+        _verify_choices()
     else:
         parser.error(f"Unknown command: {args.command}")
 
