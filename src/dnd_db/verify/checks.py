@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
-from dnd_db.models.character_class import CharacterClass
+from dnd_db.models.dnd_class import DndClass
 from dnd_db.models.feature import Feature
 from dnd_db.models.import_run import ImportRun
 from dnd_db.models.raw_entity import RawEntity
@@ -36,7 +36,7 @@ def check_counts(session: Session) -> dict[str, Any]:
         select(func.count()).select_from(RawEntity).where(RawEntity.entity_type == "feature")
     ).one()
     spell_count = session.exec(select(func.count()).select_from(Spell)).one()
-    class_count = session.exec(select(func.count()).select_from(CharacterClass)).one()
+    class_count = session.exec(select(func.count()).select_from(DndClass)).one()
     subclass_count = session.exec(select(func.count()).select_from(Subclass)).one()
     feature_count = session.exec(select(func.count()).select_from(Feature)).one()
 
@@ -113,11 +113,11 @@ def check_duplicates(session: Session) -> list[str]:
 
     class_duplicates = session.exec(
         select(
-            CharacterClass.source_id,
-            CharacterClass.source_key,
+            DndClass.source_id,
+            DndClass.source_key,
             func.count().label("count"),
         )
-        .group_by(CharacterClass.source_id, CharacterClass.source_key)
+        .group_by(DndClass.source_id, DndClass.source_key)
         .having(func.count() > 1)
     ).all()
     for source_id, source_key, count in class_duplicates:
@@ -198,7 +198,7 @@ def check_missing_links(session: Session) -> list[str]:
         )
 
     missing_class_link = session.exec(
-        select(CharacterClass).where(CharacterClass.raw_entity_id.is_(None))
+        select(DndClass).where(DndClass.raw_entity_id.is_(None))
     ).all()
     for character_class in missing_class_link:
         problems.append(
@@ -207,9 +207,9 @@ def check_missing_links(session: Session) -> list[str]:
         )
 
     orphaned_class = session.exec(
-        select(CharacterClass).where(
-            CharacterClass.raw_entity_id.is_not(None),
-            ~CharacterClass.raw_entity_id.in_(raw_ids),
+        select(DndClass).where(
+            DndClass.raw_entity_id.is_not(None),
+            ~DndClass.raw_entity_id.in_(raw_ids),
         )
     ).all()
     for character_class in orphaned_class:
@@ -218,8 +218,8 @@ def check_missing_links(session: Session) -> list[str]:
             f"id={character_class.id} raw_entity_id={character_class.raw_entity_id}"
         )
 
-    raw_class_ids = select(CharacterClass.raw_entity_id).where(
-        CharacterClass.raw_entity_id.is_not(None)
+    raw_class_ids = select(DndClass.raw_entity_id).where(
+        DndClass.raw_entity_id.is_not(None)
     )
     orphaned_raw_classes = session.exec(
         select(RawEntity).where(
@@ -337,12 +337,12 @@ def check_class_essentials(session: Session) -> list[str]:
     problems: list[str] = []
 
     missing_essentials = session.exec(
-        select(CharacterClass).where(
+        select(DndClass).where(
             or_(
-                CharacterClass.name.is_(None),
-                CharacterClass.name == "",
-                CharacterClass.source_key.is_(None),
-                CharacterClass.source_key == "",
+                DndClass.name.is_(None),
+                DndClass.name == "",
+                DndClass.source_key.is_(None),
+                DndClass.source_key == "",
             )
         )
     ).all()
@@ -411,6 +411,11 @@ def run_all_checks(session: Session) -> tuple[bool, dict[str, Any]]:
         errors.append(
             "Spell count mismatch: "
             f"raw_entities spell={counts['raw_entities_spell']} spells={counts['spells']}"
+        )
+    if counts["raw_entities_class"] != counts["classes"]:
+        errors.append(
+            "Class count mismatch: "
+            f"raw_entities class={counts['raw_entities_class']} classes={counts['classes']}"
         )
 
     errors.extend(check_duplicates(session))
