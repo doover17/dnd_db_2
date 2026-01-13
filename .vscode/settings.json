@@ -7,5 +7,7 @@
         "spellbooks",
         "sqlalchemy",
         "sqlmodel"
-    ]
+    ],
+    "python-envs.pythonProjects": [],
+    "python-envs.defaultEnvManager": "ms-python.python:venv"
 }
