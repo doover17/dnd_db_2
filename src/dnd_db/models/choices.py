@@ -14,7 +14,7 @@ def _utc_now() -> datetime:
 
 
 class ChoiceGroup(SQLModel, table=True):
-    """Represents a choice point for a class, subclass, or feature."""
+    """Represents a choice point for a class or feature."""
 
     __tablename__ = "choice_groups"
     __table_args__ = (
@@ -23,12 +23,13 @@ class ChoiceGroup(SQLModel, table=True):
             "owner_type",
             "owner_id",
             "choice_type",
-            "choose_n",
             "level",
-            "notes",
+            "source_key",
             name="uq_choice_groups_owner_choice",
         ),
         Index("ix_choice_groups_owner", "owner_type", "owner_id"),
+        Index("ix_choice_groups_choice_type", "choice_type"),
+        Index("ix_choice_groups_level", "level"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -36,9 +37,13 @@ class ChoiceGroup(SQLModel, table=True):
     owner_type: str = Field(sa_column=Column(String, nullable=False))
     owner_id: int = Field(sa_column=Column(Integer, nullable=False))
     choice_type: str = Field(sa_column=Column(String, nullable=False))
-    choose_n: int = Field(sa_column=Column(Integer, nullable=False))
+    choose_n: int = Field(default=1, sa_column=Column(Integer, nullable=False))
     level: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    label: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
     notes: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    source_key: Optional[str] = Field(
+        default=None, sa_column=Column(String, nullable=True)
+    )
 
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), default=_utc_now, nullable=False)
@@ -65,26 +70,20 @@ class ChoiceOption(SQLModel, table=True):
             "label",
             name="uq_choice_options_group_option",
         ),
-        Index("ix_choice_options_group", "choice_group_id"),
+        Index("ix_choice_options_feature_id", "feature_id"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     choice_group_id: int = Field(foreign_key="choice_groups.id", index=True)
     option_type: str = Field(sa_column=Column(String, nullable=False))
-    option_source_key: str = Field(sa_column=Column(String, nullable=False))
-    option_ref_id: Optional[int] = Field(default=None, sa_column=Column(Integer))
+    option_source_key: Optional[str] = Field(
+        default=None, sa_column=Column(String, nullable=True)
+    )
     label: str = Field(sa_column=Column(String, nullable=False))
+    feature_id: Optional[int] = Field(default=None, foreign_key="features.id")
 
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), default=_utc_now, nullable=False)
-    )
-    updated_at: datetime = Field(
-        sa_column=Column(
-            DateTime(timezone=True),
-            default=_utc_now,
-            onupdate=_utc_now,
-            nullable=False,
-        )
     )
 
 

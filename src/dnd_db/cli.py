@@ -351,8 +351,7 @@ def _load_choices(source_name: str) -> None:
     print("Choices loaded:")
     print(f"- choice_groups_created: {summary['choice_groups_created']}")
     print(f"- choice_options_created: {summary['choice_options_created']}")
-    print(f"- missing_owner_count: {summary['missing_owner_count']}")
-    print(f"- missing_option_refs_count: {summary['missing_option_refs_count']}")
+    print(f"- unresolved_feature_refs: {summary['unresolved_feature_refs']}")
 
 
 def _verify_choices() -> None:
@@ -360,6 +359,11 @@ def _verify_choices() -> None:
     create_db_and_tables(engine)
     with Session(engine) as session:
         report = verify_choices(session)
+    warnings = report.get("warnings", [])
+    if warnings:
+        print("Choice verification warnings:")
+        for warning in warnings:
+            print(f"- {warning}")
     errors = report.get("errors", [])
     if errors:
         print("Choice verification errors:")
