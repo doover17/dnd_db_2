@@ -20,6 +20,7 @@ class Subclass(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("source_id", "source_key", name="uq_subclasses_source_key"),
         Index("ix_subclasses_name", "name"),
+        Index("ix_subclasses_class_source_key", "class_source_key"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -34,12 +35,7 @@ class Subclass(SQLModel, table=True):
     subclass_flavor: Optional[str] = Field(
         default=None, sa_column=Column(String, nullable=True)
     )
-    subclass_desc: Optional[str] = Field(
-        default=None, sa_column=Column(Text, nullable=True)
-    )
-    spellcasting_ability: Optional[str] = Field(
-        default=None, sa_column=Column(String, nullable=True)
-    )
+    desc: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     srd: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
     api_url: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
 
